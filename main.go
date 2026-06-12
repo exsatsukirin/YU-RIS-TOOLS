@@ -458,6 +458,80 @@ func cmdInjectText(args []string) {
 	}
 	if outputDir == "" { outputDir = "ybn_translated" }
 
+	// Load translated entries
+	transEntries, err := ybn.LoadTextJSON(transPath)
+	if err != nil { fmt.Fprintf(os.Stderr, "Error: %v\n", err); os.Exit(1) }
 
-// ── inject-text ──
+	// Build map: {filename: {seq: translated_text}}
+	transMap := make(map[string]map[int]string)
+	for _, e := range transEntries {
+		if _, ok := transMap[e.File]; !ok {
+			transMap[e.File] = make(map[int]string)
+		}
+		transMap[e.File][e.Seq] = e.Text
+	}
+
+	os.MkdirAll(outputDir, 0755)
+	ybnFiles, _ := os.ReadDir(ybnDir)
+
+	// Single tunnel instance for all files — ensures consistent sjis_ext.bin
+	tunnel := ybn.NewSjisTunnel()
+	total, files := 0, 0
+	for _, f := range ybnFiles {
+		if !strings.HasSuffix(strings.ToLower(f.Name()), ".ybn") { continue }
+		ybnPath := filepath.Join(ybnDir, f.Name())
+
+		origEntries, err := ybn.ExtractText(ybnPath)
+		if err != nil { continue }
+
+		tmap, ok := transMap[f.Name()]
+		if !ok { continue }
+
+		diff := make(map[string]string)
+		for _, oe := range origEntries {
+			if t, ok := tmap[oe.Seq]; ok && t != "" && t != oe.Text {
+				diff[oe.Text] = t
+			}
+		}
+		if len(diff) == 0 { continue }
+
+		y, err := ybn.Read(ybnPath)
+		if err != nil || y.Magic != "YSTB" { continue }
+
+		n := y.ReplaceText(diff, tunnel)
+		outPath := filepath.Join(outputDir, f.Name())
+		y.Write(outPath)
+		if n > 0 { fmt.Printf("  [OK] %s: %d replacements\n", f.Name(), n) }
+		total += n; files++
+	}
+
+	// Generate sjis_ext.bin from the same tunnel instance
+	tunnelPath := filepath.Join(outputDir, "sjis_ext.bin")
+	if len(tunnel.Mappings) > 0 {
+		var u16 []byte
+		for _, ch := range tunnel.Mappings {
+			for _, r := range ch {
+				u16 = append(u16, byte(r), byte(r>>8))
+			}
+		}
+		os.WriteFile(tunnelPath, u16, 0644)
+		fmt.Printf("  sjis_ext.bin: %d tunnel chars\n", len(tunnel.Mappings))
+	}
+
+	// Auto-patch yscfg.ybn for no-pack
+	yscfgPath := filepath.Join(outputDir, "yscfg.ybn")
+	if data, err := os.ReadFile(yscfgPath); err == nil && len(data) >= 0x48 {
+		patched := make([]byte, len(data))
+		copy(patched, data)
+		for _, off := range []int{0x3C, 0x40, 0x44} {
+			patched[off] = 1
+			patched[off+1] = 0
+			patched[off+2] = 0
+			patched[off+3] = 0
+		}
+		os.WriteFile(yscfgPath, patched, 0644)
+		fmt.Printf("  yscfg.ybn no-pack flags set\n")
+	}
+
+	fmt.Printf("\nDone. %d replacements in %d files → %s/\n", total, files, outputDir)
 }
