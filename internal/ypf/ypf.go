@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/text/encoding/japanese"
 )
@@ -144,11 +145,18 @@ func Parse(data []byte) (*Archive, error) {
 
 func (a *Archive) ExtractTo(dir string) error {
 	for i, e := range a.Entries {
-		safeName := filepath.FromSlash(e.Name)
-		outPath := filepath.Join(dir, safeName)
-		outDir := filepath.Dir(outPath)
-		if err := os.MkdirAll(outDir, 0755); err != nil {
-			return fmt.Errorf("mkdir %s: %w", outDir, err)
+		// Strip directory prefix, keep only filename
+		name := e.Name
+		if idx := strings.LastIndexByte(name, '\\'); idx >= 0 {
+			name = name[idx+1:]
+		}
+		if idx := strings.LastIndexByte(name, '/'); idx >= 0 {
+			name = name[idx+1:]
+		}
+
+		outPath := filepath.Join(dir, name)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("mkdir %s: %w", dir, err)
 		}
 		if err := os.WriteFile(outPath, e.Data, 0644); err != nil {
 			return fmt.Errorf("write %s: %w", outPath, err)
