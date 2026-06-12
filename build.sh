@@ -2,7 +2,7 @@
 # Build yrt for Linux and Windows
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")"
 
 mkdir -p build
 

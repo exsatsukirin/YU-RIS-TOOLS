@@ -2,7 +2,7 @@
 REM Build yrt for Windows and Linux
 setlocal
 
-cd /d "%~dp0\.."
+cd /d "%~dp0"
 
 if not exist build mkdir build
 
