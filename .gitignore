@@ -1,5 +1,5 @@
 # Binary
-yu-ris-tools-go
+yrt
 
 # IDE
 .idea/
@@ -10,3 +10,4 @@ yu-ris-tools-go
 # OS
 .DS_Store
 Thumbs.db
+build/

@@ -40,10 +40,10 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println(`YU-RIS Tools (Go) - YBN/YPF manipulation tool
+	fmt.Println(`YU-RIS Tools (yrt) - YBN/YPF manipulation tool
 
 Usage:
-  yu-ris-tools-go <command> [options]
+  yrt <command> [options]
 
 Commands:
   extract   <input.ypf> [output_dir]   Extract YPF archive
@@ -54,13 +54,13 @@ Commands:
   verify    <file.ybn|dir/>            Verify round-trip
 
 Examples:
-  yu-ris-tools-go extract ysbin.ypf extracted/
-  yu-ris-tools-go decompile yst00066.ybn -o out.yst
-  yu-ris-tools-go decompile original_ybn/ -o decompiled/
-  yu-ris-tools-go compile yst/ -o ybn_out/ --original original_ybn/
-  yu-ris-tools-go stats yst00066.ybn
-  yu-ris-tools-go keyfind original_ybn/
-  yu-ris-tools-go verify original_ybn/
+  yrt extract ysbin.ypf extracted/
+  yrt decompile yst00066.ybn -o out.yst
+  yrt decompile original_ybn/ -o decompiled/
+  yrt compile yst/ -o ybn_out/ --original original_ybn/
+  yrt stats yst00066.ybn
+  yrt keyfind original_ybn/
+  yrt verify original_ybn/
 `)
 }
 

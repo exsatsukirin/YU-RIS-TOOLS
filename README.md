@@ -5,7 +5,7 @@ YU-RIS/ERIS 引擎视觉小说翻译工具集（Go 实现）。
 ## 功能
 
 ```
-yu-ris-tools-go <命令> [参数]
+yrt <命令> [参数]
 
 命令:
   extract   <文件.ypf> [输出目录]     YPF 封包解包
@@ -22,17 +22,17 @@ yu-ris-tools-go <命令> [参数]
 ### 1. 从游戏封包提取脚本
 
 ```bash
-./yu-ris-tools-go extract 游戏/pac/ysbin.ypf original_ybn/
+./yrt extract 游戏/pac/ysbin.ypf original_ybn/
 ```
 
 ### 2. 反编译为可读脚本
 
 ```bash
 # 批量反编译
-./yu-ris-tools-go decompile original_ybn/ -o yst_original/
+./yrt decompile original_ybn/ -o yst_original/
 
 # 单个文件
-./yu-ris-tools-go decompile original_ybn/yst00066.ybn -o script.yst
+./yrt decompile original_ybn/yst00066.ybn -o script.yst
 ```
 
 输出示例：
@@ -63,7 +63,7 @@ cp -r yst_original/ yst_translated/
 
 ```bash
 # diff 模式（推荐）：对比原始和翻译后的 YST，仅注入变更
-./yu-ris-tools-go compile yst_translated/ \
+./yrt compile yst_translated/ \
     -o ybn_output/ \
     --original original_ybn/ \
     --original-yst yst_original/
@@ -114,13 +114,13 @@ YU-RIS 引擎内部使用 Shift-JIS 编码，约 23% 简体中文汉字无法表
 
 ```bash
 # 查看指令分布
-./yu-ris-tools-go stats original_ybn/yst00066.ybn
+./yrt stats original_ybn/yst00066.ybn
 
 # 恢复 XOR 密钥
-./yu-ris-tools-go keyfind original_ybn/
+./yrt keyfind original_ybn/
 
 # 批量 round-trip 验证
-./yu-ris-tools-go verify original_ybn/
+./yrt verify original_ybn/
 ```
 
 ## 架构
