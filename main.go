@@ -26,6 +26,10 @@ func main() {
 		cmdDecompile(args)
 	case "compile":
 		cmdCompile(args)
+	case "extract-text":
+		cmdExtractText(args)
+	case "inject-text":
+		cmdInjectText(args)
 	case "stats":
 		cmdStats(args)
 	case "keyfind":
@@ -46,12 +50,14 @@ Usage:
   yrt <command> [options]
 
 Commands:
-  extract   <input.ypf> [output_dir]   Extract YPF archive
-  decompile <input.ybn> [-o output.yst]  Decompile YBN to YST
-  compile   <yst_dir> -o <ybn_dir> --original <ybn_dir> [--original-yst <yst_dir>]
-  stats     <input.ybn>                Show opcode statistics
-  keyfind   <file.ybn|dir/>            Recover XOR key
-  verify    <file.ybn|dir/>            Verify round-trip
+  extract      <input.ypf> [output_dir]   Extract YPF archive
+  extract-text <input.ybn|dir/> [-o out.json]  Extract dialogue text to JSON
+  inject-text  <ybn_dir> -t <trans.json> [-o out_dir]  Inject translations
+  decompile    <input.ybn> [-o output.yst]  Decompile YBN to YST
+  compile      <yst_dir> -o <ybn_dir> --original <ybn_dir> [--original-yst <yst_dir>]
+  stats        <input.ybn>                Show opcode statistics
+  keyfind      <file.ybn|dir/>            Recover XOR key
+  verify       <file.ybn|dir/>            Verify round-trip
 
 Examples:
   yrt extract ysbin.ypf extracted/
@@ -393,3 +399,129 @@ func verifyFile(path string) bool {
 }
 
 
+
+// ── extract-text ──
+
+func cmdExtractText(args []string) {
+	input := ""
+	output := ""
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "-o":
+			if i+1 < len(args) { output = args[i+1]; i++ }
+		default:
+			if input == "" { input = args[i] }
+		}
+	}
+	if input == "" {
+		fmt.Fprintln(os.Stderr, "Usage: yrt extract-text <input.ybn|dir/> [-o out.json]")
+		os.Exit(1)
+	}
+	if output == "" { output = "translations.json" }
+
+	info, err := os.Stat(input)
+	if err != nil { fmt.Fprintf(os.Stderr, "Error: %v\n", err); os.Exit(1) }
+
+	var entries []ybn.TextEntry
+	if info.IsDir() {
+		entries, err = ybn.ExtractDir(input)
+	} else {
+		entries, err = ybn.ExtractText(input)
+	}
+	if err != nil { fmt.Fprintf(os.Stderr, "Error: %v\n", err); os.Exit(1) }
+
+	if err := ybn.SaveTextJSON(entries, output); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err); os.Exit(1)
+	}
+
+	texts := make(map[string]bool)
+	for _, e := range entries {
+		if e.Text != "" { texts[e.Text] = true }
+	}
+	fmt.Printf("Extracted %d lines (%d unique) → %s\n", len(entries), len(texts), output)
+}
+
+// ── inject-text ──
+
+func cmdInjectText(args []string) {
+	ybnDir, transPath, outputDir := "", "", ""
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "-t": if i+1 < len(args) { transPath = args[i+1]; i++ }
+		case "-o": if i+1 < len(args) { outputDir = args[i+1]; i++ }
+		default: if ybnDir == "" { ybnDir = args[i] }
+		}
+	}
+	if ybnDir == "" || transPath == "" {
+		fmt.Fprintln(os.Stderr, "Usage: yrt inject-text <ybn_dir> -t <trans.json> [-o out_dir]")
+		os.Exit(1)
+	}
+	if outputDir == "" { outputDir = "ybn_translated" }
+
+
+// ── inject-text ──
+
+func cmdInjectText(args []string) {
+	ybnDir, transPath, outputDir := "", "", ""
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "-t": if i+1 < len(args) { transPath = args[i+1]; i++ }
+		case "-o": if i+1 < len(args) { outputDir = args[i+1]; i++ }
+		default: if ybnDir == "" { ybnDir = args[i] }
+		}
+	}
+	if ybnDir == "" || transPath == "" {
+		fmt.Fprintln(os.Stderr, "Usage: yrt inject-text <ybn_dir> -t <trans.json> [-o out_dir]")
+		os.Exit(1)
+	}
+	if outputDir == "" { outputDir = "ybn_translated" }
+
+	// Load translated entries
+	transEntries, err := ybn.LoadTextJSON(transPath)
+	if err != nil { fmt.Fprintf(os.Stderr, "Error: %v\n", err); os.Exit(1) }
+
+	// Build map: {filename: {seq: translated_text}}
+	transMap := make(map[string]map[int]string)
+	for _, e := range transEntries {
+		if _, ok := transMap[e.File]; !ok {
+			transMap[e.File] = make(map[int]string)
+		}
+		transMap[e.File][e.Seq] = e.Text
+	}
+
+	os.MkdirAll(outputDir, 0755)
+	ybnFiles, _ := os.ReadDir(ybnDir)
+
+	total, files := 0, 0
+	for _, f := range ybnFiles {
+		if !strings.HasSuffix(strings.ToLower(f.Name()), ".ybn") { continue }
+		ybnPath := filepath.Join(ybnDir, f.Name())
+
+		// Extract original texts to compare
+		origEntries, err := ybn.ExtractText(ybnPath)
+		if err != nil { continue }
+
+		tmap, ok := transMap[f.Name()]
+		if !ok { continue }
+
+		// Build translation map: only entries where text differs
+		diff := make(map[string]string)
+		for _, oe := range origEntries {
+			if t, ok := tmap[oe.Seq]; ok && t != "" && t != oe.Text {
+				diff[oe.Text] = t
+			}
+		}
+		if len(diff) == 0 { continue }
+
+		y, err := ybn.Read(ybnPath)
+		if err != nil || y.Magic != "YSTB" { continue }
+
+		tunnel := ybn.NewSjisTunnel()
+		n := y.ReplaceText(diff, tunnel)
+		outPath := filepath.Join(outputDir, f.Name())
+		y.Write(outPath)
+		if n > 0 { fmt.Printf("  [OK] %s: %d replacements\n", f.Name(), n) }
+		total += n; files++
+	}
+	fmt.Printf("\nDone. %d replacements in %d files → %s/\n", total, files, outputDir)
+}
