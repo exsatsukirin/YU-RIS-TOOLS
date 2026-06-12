@@ -79,24 +79,27 @@ func resolveTexts(strSec []byte, opcode byte, params []ParaEntry) []TextRef {
 	jpRight := []byte{0x81, 0x76}
 
 	if opcode == 0x6A || opcode == 0x36 {
-		for _, p := range params {
+		// For SPEAKER (0x36): param_count=2, dialogue is in the LAST para
+		// For WORD (0x6A): param_count=1, the only para
+		idx := 0
+		if opcode == 0x36 && len(params) >= 2 {
+			idx = len(params) - 1 // use last para (dialogue text)
+		}
+		if idx < len(params) {
+			p := params[idx]
 			if p.Length > 0 && p.Length < 0x10000 && int(p.Offset+p.Length) <= len(strSec) {
 				raw := strSec[p.Offset : p.Offset+p.Length]
 				dialogueText := extractDialogue(raw, jpLeft, jpRight)
 				if dialogueText == "" {
 					dialogueText = decodeSJIS(raw)
 				}
-				hexLen := len(raw)
-				hexStr := ""
-				for i := 0; i < hexLen && i < 80; i++ {
-					hexStr += fmt.Sprintf("%02x ", raw[i])
-				}
+				hexStr := rawHex(raw, 80)
 				refs = append(refs, TextRef{
 					Type:   "TEXT",
 					Offset: p.Offset,
 					Length: p.Length,
 					Text:   dialogueText,
-					RawHex: strings.TrimSpace(hexStr),
+					RawHex: hexStr,
 				})
 			}
 		}
@@ -151,6 +154,14 @@ func extractBytecodeStrings(data []byte) []StringEntry {
 		i++
 	}
 	return result
+}
+
+func rawHex(data []byte, maxLen int) string {
+	var b strings.Builder
+	for i := 0; i < len(data) && i < maxLen; i++ {
+		fmt.Fprintf(&b, "%02x ", data[i])
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // ── ERIS Bytecode Parser ──
