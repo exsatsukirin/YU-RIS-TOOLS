@@ -219,7 +219,7 @@ func (p *BytecodeParser) Parse(data []byte, baseOffset int) []BytecodeInstr {
 					if end > payloadStart {
 						inner := data[payloadStart+1 : end]
 						s := decodeSJIS(inner)
-						args = append(args, fmt.Sprintf("%q", s))
+						args = append(args, fmt.Sprintf(`"%s"`, s))
 						i = end + 1
 						instrs = append(instrs, BytecodeInstr{info.Mnemonic, args, baseOffset + i})
 						continue
@@ -405,7 +405,7 @@ func (f *YSTFormatter) formatInstr(inst Instr) string {
 		}
 		escaped := strings.ReplaceAll(text, "\\", "\\\\")
 		escaped = strings.ReplaceAll(escaped, "\"", "\\\"")
-		return fmt.Sprintf("%sWORD[%q]%s", f.indentStr, escaped, tag)
+		return fmt.Sprintf(`%sWORD["%s"]%s`, f.indentStr, escaped, tag)
 
 	case 0x36:
 		text := ""
@@ -414,7 +414,7 @@ func (f *YSTFormatter) formatInstr(inst Instr) string {
 		}
 		escaped := strings.ReplaceAll(text, "\\", "\\\\")
 		escaped = strings.ReplaceAll(escaped, "\"", "\\\"")
-		return fmt.Sprintf("%sSPEAKER[%q]%s", f.indentStr, escaped, tag)
+		return fmt.Sprintf(`%sSPEAKER["%s"]%s`, f.indentStr, escaped, tag)
 
 	case 0x2D:
 		return f.formatScriptDump(inst, tag)
