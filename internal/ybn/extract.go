@@ -94,27 +94,7 @@ func ExtractText(path string) ([]TextEntry, error) {
 }
 
 func mergeEntries(entries []TextEntry) []TextEntry {
-	// Merge consecutive WORD entries with split 「」: first has 「 but no 」, next has 」 but no 「
-	if len(entries) < 2 {
-		return entries
-	}
-	merged := make([]TextEntry, 0, len(entries))
-	i := 0
-	for i < len(entries) {
-		e := entries[i]
-		if i+1 < len(entries) &&
-			e.Opcode == "0x6A" && entries[i+1].Opcode == "0x6A" &&
-			e.HasOpen && !e.HasClose && !entries[i+1].HasOpen && entries[i+1].HasClose {
-			e.Text = e.Text + "\n" + entries[i+1].Text
-			e.Length += entries[i+1].Length
-			e.HasClose = true
-			i += 2
-		} else {
-			i++
-		}
-		merged = append(merged, e)
-	}
-	return merged
+	return entries // no merge — keep per-para for correct injection matching
 }
 
 func bytesContain(data, sub []byte) bool {
