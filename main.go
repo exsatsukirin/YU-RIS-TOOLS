@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -444,16 +445,17 @@ func cmdExtractText(args []string) {
 // ── inject-text ──
 
 func cmdInjectText(args []string) {
-	ybnDir, transPath, outputDir := "", "", ""
+	ybnDir, transPath, namesPath, outputDir := "", "", "", ""
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "-t": if i+1 < len(args) { transPath = args[i+1]; i++ }
+		case "-n": if i+1 < len(args) { namesPath = args[i+1]; i++ }
 		case "-o": if i+1 < len(args) { outputDir = args[i+1]; i++ }
 		default: if ybnDir == "" { ybnDir = args[i] }
 		}
 	}
 	if ybnDir == "" || transPath == "" {
-		fmt.Fprintln(os.Stderr, "Usage: yrt inject-text <ybn_dir> -t <trans.json> [-o out_dir]")
+		fmt.Fprintln(os.Stderr, "Usage: yrt inject-text <ybn_dir> -t <trans.json> [-n names.json] [-o out_dir]")
 		os.Exit(1)
 	}
 	if outputDir == "" { outputDir = "ybn_translated" }
@@ -461,6 +463,13 @@ func cmdInjectText(args []string) {
 	// Load translated entries
 	transEntries, err := ybn.LoadTextJSON(transPath)
 	if err != nil { fmt.Fprintf(os.Stderr, "Error: %v\n", err); os.Exit(1) }
+
+	// Load names
+	var nameMap map[string]string
+	if namesPath != "" {
+		nameMap, err = ybn.LoadNamesJSON(namesPath)
+		if err != nil { fmt.Fprintf(os.Stderr, "Warning: names: %v\n", err) }
+	}
 
 	// Build map: {filename: {seq: translated_text}}
 	transMap := make(map[string]map[int]string)
@@ -474,35 +483,76 @@ func cmdInjectText(args []string) {
 	os.MkdirAll(outputDir, 0755)
 	ybnFiles, _ := os.ReadDir(ybnDir)
 
-	// Single tunnel instance for all files — ensures consistent sjis_ext.bin
+	// Copy all original YBNs as base (non-YSTB files included)
+	for _, f := range ybnFiles {
+		if !strings.HasSuffix(strings.ToLower(f.Name()), ".ybn") { continue }
+		src, _ := os.ReadFile(filepath.Join(ybnDir, f.Name()))
+		if src == nil { continue }
+		os.WriteFile(filepath.Join(outputDir, f.Name()), src, 0644)
+	}
+
 	tunnel := ybn.NewSjisTunnel()
-	total, files := 0, 0
+	td1, tn1, files, skipped := 0, 0, 0, 0
 	for _, f := range ybnFiles {
 		if !strings.HasSuffix(strings.ToLower(f.Name()), ".ybn") { continue }
 		ybnPath := filepath.Join(ybnDir, f.Name())
 
-		origEntries, err := ybn.ExtractText(ybnPath)
-		if err != nil { continue }
-
-		tmap, ok := transMap[f.Name()]
-		if !ok { continue }
-
-		diff := make(map[string]string)
-		for _, oe := range origEntries {
-			if t, ok := tmap[oe.Seq]; ok && t != "" && t != oe.Text {
-				diff[oe.Text] = t
-			}
-		}
-		if len(diff) == 0 { continue }
-
 		y, err := ybn.Read(ybnPath)
 		if err != nil || y.Magic != "YSTB" { continue }
 
-		n := y.ReplaceText(diff, tunnel)
-		outPath := filepath.Join(outputDir, f.Name())
-		y.Write(outPath)
-		if n > 0 { fmt.Printf("  [OK] %s: %d replacements\n", f.Name(), n) }
-		total += n; files++
+		dCount, nCount := 0, 0
+
+		// Dialogue injection
+		origEntries, err := ybn.ExtractText(ybnPath)
+		if err == nil {
+			tmap, ok := transMap[f.Name()]
+			if ok {
+				diff := make(map[string]string)
+				for _, oe := range origEntries {
+					if t, ok := tmap[oe.Seq]; ok && t != "" && t != oe.Text {
+						diff[oe.Text] = t
+					}
+				}
+				if len(diff) > 0 {
+					dCount = y.ReplaceText(diff, tunnel)
+					td1 += dCount
+				}
+			}
+		}
+
+		// Name patching (using same tunnel)
+		if len(nameMap) > 0 {
+			strSec := []byte(y.StrSec)
+			for jp, cn := range nameMap {
+				jpBytes, _ := ybn.SjisEncoder.Bytes([]byte(jp))
+				if len(jpBytes) == 0 { continue }
+				cnBytes := tunnel.Encode(cn)
+				if len(cnBytes) > len(jpBytes) { continue }
+				pos := 0
+				for {
+					idx := indexBytes(strSec[pos:], jpBytes)
+					if idx < 0 { break }
+					copy(strSec[pos+idx:], cnBytes)
+					for k := pos + idx + len(cnBytes); k < pos+idx+len(jpBytes); k++ {
+						strSec[k] = 0
+					}
+					nCount++
+					pos += idx + len(cnBytes)
+				}
+			}
+			y.StrSec = strSec
+			tn1 += nCount
+		}
+
+		if dCount > 0 || nCount > 0 {
+			if dCount > 0 || nCount > 0 {
+				fmt.Printf("  [OK] %s: %d dialogue + %d names\n", f.Name(), dCount, nCount)
+			}
+			y.Write(filepath.Join(outputDir, f.Name()))
+			files++
+		} else {
+			skipped++
+		}
 	}
 
 	// Generate sjis_ext.bin from the same tunnel instance
@@ -533,5 +583,14 @@ func cmdInjectText(args []string) {
 		fmt.Printf("  yscfg.ybn no-pack flags set\n")
 	}
 
-	fmt.Printf("\nDone. %d replacements in %d files → %s/\n", total, files, outputDir)
+	fmt.Printf("\nDone. %d files → %s/\n", files, outputDir)
+}
+
+func indexBytes(s, sub []byte) int {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if bytes.Equal(s[i:i+len(sub)], sub) {
+			return i
+		}
+	}
+	return -1
 }

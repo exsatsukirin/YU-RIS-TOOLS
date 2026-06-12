@@ -4,7 +4,7 @@ import (
 	"golang.org/x/text/encoding/japanese"
 )
 
-var sjisEncoder = japanese.ShiftJIS.NewEncoder()
+var SjisEncoder = japanese.ShiftJIS.NewEncoder()
 var sjisDecoder = japanese.ShiftJIS.NewDecoder()
 
 // Low bytes to avoid in tunnel encoding
@@ -24,9 +24,9 @@ func NewSjisTunnel() *SjisTunnel {
 func (t *SjisTunnel) Encode(text string) []byte {
 	var result []byte
 	for _, ch := range text {
-		_, err := sjisEncoder.Bytes([]byte(string(ch)))
+		_, err := SjisEncoder.Bytes([]byte(string(ch)))
 		if err == nil {
-			enc, _ := sjisEncoder.Bytes([]byte(string(ch)))
+			enc, _ := SjisEncoder.Bytes([]byte(string(ch)))
 			result = append(result, enc...)
 		} else {
 			if _, ok := t.charToIdx[ch]; !ok {

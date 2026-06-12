@@ -65,34 +65,82 @@ func ExtractText(path string) ([]TextEntry, error) {
 			p := paras[ei+idx]
 			if p.Length > 0 && p.Length < 0x10000 && int(p.Offset+p.Length) <= len(y.StrSec) {
 				raw := y.StrSec[p.Offset : p.Offset+p.Length]
+				hasOp := bytesContain(raw, jpLeft)
+				hasCl := bytesContain(raw, jpRight)
 				text := extractDialogue(raw, jpLeft, jpRight)
 				if text == "" {
 					text = stripPrefix(raw, jpLeft, jpRight)
 				}
 				entries = append(entries, TextEntry{
-					File:   filepath.Base(path),
-					Seq:    seq,
-					Opcode: fmt.Sprintf("0x%02X", cmd.Opcode),
-					Offset: int(p.Offset),
-					Length: int(p.Length),
-					Text:   text,
+					File:     filepath.Base(path),
+					Seq:      seq,
+					Opcode:   fmt.Sprintf("0x%02X", cmd.Opcode),
+					Offset:   int(p.Offset),
+					Length:   int(p.Length),
+					Text:     text,
+					HasOpen:  hasOp,
+					HasClose: hasCl,
 				})
 				seq++
 			}
 		}
 		ei += pc
 	}
+
+	// Merge consecutive WORD entries that split quoted text across instructions
+	entries = mergeEntries(entries)
+
 	return entries, nil
+}
+
+func mergeEntries(entries []TextEntry) []TextEntry {
+	// Merge consecutive WORD entries with split 「」: first has 「 but no 」, next has 」 but no 「
+	if len(entries) < 2 {
+		return entries
+	}
+	merged := make([]TextEntry, 0, len(entries))
+	i := 0
+	for i < len(entries) {
+		e := entries[i]
+		if i+1 < len(entries) &&
+			e.Opcode == "0x6A" && entries[i+1].Opcode == "0x6A" &&
+			e.HasOpen && !e.HasClose && !entries[i+1].HasOpen && entries[i+1].HasClose {
+			e.Text = e.Text + "\n" + entries[i+1].Text
+			e.Length += entries[i+1].Length
+			e.HasClose = true
+			i += 2
+		} else {
+			i++
+		}
+		merged = append(merged, e)
+	}
+	return merged
+}
+
+func bytesContain(data, sub []byte) bool {
+	for i := 0; i <= len(data)-len(sub); i++ {
+		match := true
+		for j := 0; j < len(sub); j++ {
+			if data[i+j] != sub[j] {
+				match = false
+				break
+			}
+		}
+		if match { return true }
+	}
+	return false
 }
 
 // TextEntry represents one extracted text line.
 type TextEntry struct {
-	File   string `json:"file"`
-	Seq    int    `json:"seq"`
-	Opcode string `json:"opcode"`
-	Offset int    `json:"offset"`
-	Length int    `json:"length"`
-	Text   string `json:"text"`
+	File     string `json:"file"`
+	Seq      int    `json:"seq"`
+	Opcode   string `json:"opcode"`
+	Offset   int    `json:"offset"`
+	Length   int    `json:"length"`
+	Text     string `json:"text"`
+	HasOpen  bool   `json:"-"` // raw bytes contain 「
+	HasClose bool   `json:"-"` // raw bytes contain 」
 }
 
 // ExtractDir extracts text from all YBN files in a directory.
@@ -146,4 +194,17 @@ func LoadTextJSON(path string) ([]TextEntry, error) {
 		return nil, err
 	}
 	return entries, nil
+}
+
+// LoadNamesJSON reads a simple {jp: cn} name mapping JSON file.
+func LoadNamesJSON(path string) (map[string]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]string
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
