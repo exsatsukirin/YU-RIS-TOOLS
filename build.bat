@@ -2,7 +2,7 @@
 REM Build yrt for Windows and Linux
 setlocal
 
-cd /d "%~dp0"
+pushd "%~dp0"
 
 if not exist build mkdir build
 
@@ -23,3 +23,5 @@ go build -o build\yrt -ldflags="-s -w" .
 echo.
 echo Done:
 dir build\yrt* 2>nul
+
+popd
