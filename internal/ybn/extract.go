@@ -9,6 +9,32 @@ import (
 	"strings"
 )
 
+func stripPrefix(raw, jpLeft, jpRight []byte) string {
+	// When 「 is present but 」 is in another para, decode from after 「
+	// Also strip trailing 」 if present (closing quote in this para)
+	start := 0
+	end := len(raw)
+	
+	if len(jpLeft) == 2 {
+		for i := 0; i < len(raw)-1; i++ {
+			if raw[i] == jpLeft[0] && raw[i+1] == jpLeft[1] {
+				start = i + 2
+				break
+			}
+		}
+	}
+	if len(jpRight) == 2 {
+		for i := len(raw) - 2; i >= start; i-- {
+			if raw[i] == jpRight[0] && raw[i+1] == jpRight[1] {
+				end = i
+				break
+			}
+		}
+	}
+	
+	return decodeSJIS(raw[start:end])
+}
+
 // ExtractText extracts all dialogue text from a YBN file.
 // Returns entries grouped by file: {filename: [{opcode, offset, length, text}]}
 func ExtractText(path string) ([]TextEntry, error) {
@@ -41,7 +67,7 @@ func ExtractText(path string) ([]TextEntry, error) {
 				raw := y.StrSec[p.Offset : p.Offset+p.Length]
 				text := extractDialogue(raw, jpLeft, jpRight)
 				if text == "" {
-					text = decodeSJIS(raw)
+					text = stripPrefix(raw, jpLeft, jpRight)
 				}
 				entries = append(entries, TextEntry{
 					File:   filepath.Base(path),

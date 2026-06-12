@@ -91,7 +91,7 @@ func resolveTexts(strSec []byte, opcode byte, params []ParaEntry) []TextRef {
 				raw := strSec[p.Offset : p.Offset+p.Length]
 				dialogueText := extractDialogue(raw, jpLeft, jpRight)
 				if dialogueText == "" {
-					dialogueText = decodeSJIS(raw)
+					dialogueText = stripPrefix(raw, jpLeft, jpRight)
 				}
 				hexStr := rawHex(raw, 80)
 				refs = append(refs, TextRef{
