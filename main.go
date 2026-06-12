@@ -460,3 +460,4 @@ func cmdInjectText(args []string) {
 
 
 // ── inject-text ──
+}
