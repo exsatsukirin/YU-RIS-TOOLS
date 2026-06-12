@@ -65,11 +65,7 @@ cp ybn_translated/sjis_ext.bin 游戏/
 
 将 `version.dll`（VNTextProxy，从 [VNTranslationTools](https://github.com/arcusmaximus/VNTranslationTools) 获取）和 CJK 字体放到游戏 exe 同目录。
 
-### 6. 测试
-
-```bash
-cd 游戏目录 && LC_ALL=ja_JP.UTF-8 wine 游戏.exe
-```
+> **注意**：译文 SJIS 隧道编码后的字节数不能超过原文，否则注入会被跳过。中文通常比日文短，大多数情况满足。
 
 ### 备选：YST 编辑流程
 
