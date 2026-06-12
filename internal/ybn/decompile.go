@@ -481,6 +481,17 @@ func (f *YSTFormatter) formatScriptDump(inst Instr, tag string) string {
 // ── Text replacement ──
 
 func (y *YBNFile) ReplaceText(translationMap map[string]string, tunnel *SjisTunnel) int {
+	// Filter out entries too short to match safely (< 3 chars)
+	safeMap := make(map[string]string)
+	for k, v := range translationMap {
+		if len(k) >= 3 {
+			safeMap[k] = v
+		}
+	}
+	if len(safeMap) == 0 {
+		return 0
+	}
+
 	cmds := y.GetCmdList()
 	entries := y.GetParaEntries()
 	replaced := 0
@@ -504,7 +515,7 @@ func (y *YBNFile) ReplaceText(translationMap map[string]string, tunnel *SjisTunn
 					}
 					oldRaw := strData[offset : offset+oldLen]
 
-					newRaw, nQuote, newLen := replaceInBlockRaw(oldRaw, translationMap, tunnel, jpLeft, jpRight)
+					newRaw, nQuote, newLen := replaceInBlockRaw(oldRaw, safeMap, tunnel, jpLeft, jpRight)
 					off := int(offset)
 					oL := int(oldLen)
 					nL := int(newLen)
